@@ -29,49 +29,19 @@ export async function fileToFrame(file: File): Promise<CapturedFrame> {
   };
 }
 
-function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => {
-        if (blob) resolve(blob);
-        else reject(new Error('Could not encode the camera frame.'));
-      },
-      'image/jpeg',
-      0.92,
-    );
-  });
-}
-
-export async function captureVideoFrame(
-  video: HTMLVideoElement,
-): Promise<CapturedFrame> {
-  const width = video.videoWidth;
-  const height = video.videoHeight;
-  if (!width || !height) {
-    throw new Error('Camera frame is not ready yet. Try again.');
+export async function fetchImageFile(url: string): Promise<File> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error('Could not load the sample image. Try again.');
   }
 
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const context = canvas.getContext('2d');
-  if (!context) {
-    throw new Error('Could not capture a camera frame.');
+  const blob = await response.blob();
+  if (!blob.type.startsWith('image/')) {
+    throw new Error('The selected sample is not an image.');
   }
 
-  context.drawImage(video, 0, 0, width, height);
-  const blob = await canvasToBlob(canvas);
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const file = new File([blob], `egg-tray-${stamp}.jpg`, {
-    type: 'image/jpeg',
-  });
-
-  return {
-    file,
-    dataUrl: canvas.toDataURL('image/jpeg', 0.92),
-    width,
-    height,
-  };
+  const filename = decodeURIComponent(url.split('/').pop() ?? 'egg-sample');
+  return new File([blob], filename, { type: blob.type });
 }
 
 function clamp(value: number, min: number, max: number): number {

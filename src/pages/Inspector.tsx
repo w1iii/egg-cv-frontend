@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiClient } from '../api/client';
-import { useCamera } from '../hooks/useCamera';
 import { CapturedFrame, HealthStatus, PredictionDetail } from '../types';
 import { getErrorMessage } from '../utils/errorHandler';
 import {
   buildCropThumbnails,
+  fetchImageFile,
   fileToFrame,
 } from '../utils/frames';
-import { CameraViewfinder } from '../components/inspector/CameraViewfinder';
-import { CaptureBanner } from '../components/inspector/CaptureBanner';
+import { ImageDropzone } from '../components/inspector/ImageDropzone';
 import { SampleImageTray } from '../components/inspector/SampleImageTray';
 import { BatchCounts, ResultsPanel } from '../components/inspector/ResultsPanel';
 import { StatusFooter } from '../components/inspector/StatusFooter';
@@ -73,7 +72,6 @@ function readPersistedState(): PersistedInspectorState {
 }
 
 export function Inspector() {
-  const camera = useCamera();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const analysisInFlightRef = useRef(false);
   const [persistedState] = useState<PersistedInspectorState>(
@@ -166,12 +164,6 @@ export function Inspector() {
     }
   }, []);
 
-  const handleCapture = useCallback(async () => {
-    if (busy || analysisInFlightRef.current) return;
-    const frame = await camera.capture();
-    if (frame) await analyzeFrame(frame);
-  }, [analyzeFrame, busy, camera]);
-
   const handleUpload = useCallback(() => {
     if (!busy) fileInputRef.current?.click();
   }, [busy]);
@@ -179,6 +171,10 @@ export function Inspector() {
   const handleImageFile = useCallback(
     async (file: File) => {
       if (!file) return;
+      if (!file.type.startsWith('image/')) {
+        setError('Unsupported file. Choose a JPG, PNG, WEBP or BMP image.');
+        return;
+      }
       try {
         const frame = await fileToFrame(file);
         await analyzeFrame(frame);
@@ -187,6 +183,18 @@ export function Inspector() {
       }
     },
     [analyzeFrame],
+  );
+
+  const handleSampleSelect = useCallback(
+    async (imageUrl: string) => {
+      if (busy || analysisInFlightRef.current) return;
+      try {
+        await handleImageFile(await fetchImageFile(imageUrl));
+      } catch (err) {
+        setError(getErrorMessage(err));
+      }
+    },
+    [busy, handleImageFile],
   );
 
   const handleFileChange = useCallback(
@@ -199,6 +207,18 @@ export function Inspector() {
   );
 
   useEffect(() => {
+    const preventBrowserDrop = (event: DragEvent) => {
+      event.preventDefault();
+    };
+    window.addEventListener('dragover', preventBrowserDrop);
+    window.addEventListener('drop', preventBrowserDrop);
+    return () => {
+      window.removeEventListener('dragover', preventBrowserDrop);
+      window.removeEventListener('drop', preventBrowserDrop);
+    };
+  }, []);
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.repeat) return;
       const target = event.target as HTMLElement | null;
@@ -208,19 +228,14 @@ export function Inspector() {
         target?.isContentEditable;
       if (isTyping) return;
 
-      if (event.code === 'Space') {
-        event.preventDefault();
-        void handleCapture();
-      } else if (event.key.toLowerCase() === 'r') {
-        void handleCapture();
-      } else if (event.key.toLowerCase() === 'u') {
+      if (event.key.toLowerCase() === 'u') {
         handleUpload();
       }
     };
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [handleCapture, handleUpload]);
+  }, [handleUpload]);
 
   const exportBatch = useCallback(() => {
     if (!result) return;
@@ -268,21 +283,17 @@ export function Inspector() {
         <div className="p-4 sm:p-gutter-desktop flex flex-col gap-space-lg max-w-[1720px] mx-auto w-full">
           <Navbar />
 
-          <section className="flex flex-col bg-white/70 backdrop-blur-2xl border border-white/80 rounded-3xl p-space-md shadow-[0_12px_36px_0_rgba(0,80,203,0.07)] relative overflow-hidden">
-            <SampleImageTray busy={busy} />
-            <CameraViewfinder
-              videoRef={camera.videoRef}
-              status={camera.status}
-              error={camera.error}
+          <section className="relative flex flex-col gap-space-md overflow-hidden rounded-3xl border border-white/80 bg-white/70 p-space-sm shadow-[0_12px_36px_0_rgba(0,80,203,0.07)] backdrop-blur-2xl sm:p-space-md">
+            <SampleImageTray
+              busy={busy}
+              onSelect={(imageUrl) => void handleSampleSelect(imageUrl)}
+            />
+            <ImageDropzone
               busy={busy}
               previewDataUrl={previewDataUrl}
               onUpload={handleUpload}
               onDropFile={(file) => void handleImageFile(file)}
-            />
-            <CaptureBanner
-              canCapture={camera.status === 'ready'}
-              busy={busy}
-              onCapture={() => void handleCapture()}
+              onDropSample={(imageUrl) => void handleSampleSelect(imageUrl)}
             />
           </section>
 

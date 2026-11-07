@@ -84,7 +84,7 @@ export function EggResultCard({
 
 export function EggResultPlaceholder({ index }: { index: number }) {
   return (
-    <div className="flex flex-col bg-white/50 backdrop-blur-xl border border-dashed border-slate-300/80 rounded-2xl p-space-sm min-h-[210px]">
+    <div className="flex flex-col bg-white/50 backdrop-blur-xl border border-dashed border-slate-300/80 rounded-2xl p-space-sm min-h-[170px] sm:min-h-[210px]">
       <div className="flex items-center justify-between pb-space-xs">
         <span className="font-headline-md text-headline-md text-slate-400 font-semibold">
           Egg #{index}

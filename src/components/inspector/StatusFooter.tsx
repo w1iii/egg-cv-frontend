@@ -22,18 +22,14 @@ export function StatusFooter({
   onExport,
 }: StatusFooterProps) {
   return (
-    <footer className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-space-md bg-white/60 backdrop-blur-2xl border border-white/80 rounded-2xl px-space-md py-space-sm shadow-sm">
+    <footer className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-space-sm bg-white/60 backdrop-blur-2xl border border-white/80 rounded-2xl px-space-sm py-space-sm shadow-sm sm:gap-space-md sm:px-space-md">
       <div className="flex items-center gap-space-xs text-[#727687] font-body-sm text-body-sm">
         <StatusDot online={health?.status === 'healthy'} />
         <span>{health?.status === 'healthy' ? 'System online' : 'System unavailable'}</span>
       </div>
       <div className="flex flex-wrap items-center justify-between lg:justify-end gap-space-sm">
-        <div className="flex items-center gap-space-xs text-[#727687] font-body-sm text-body-sm">
+        <div className="flex flex-wrap items-center gap-space-xs text-[#727687] font-body-sm text-body-sm">
           <span>Shortcuts</span>
-          <kbd className="rounded border border-slate-200 bg-white px-1.5 py-0.5 font-code-metric text-label-sm">
-            Space
-          </kbd>
-          <span>capture</span>
           <kbd className="rounded border border-slate-200 bg-white px-1.5 py-0.5 font-code-metric text-label-sm">
             U
           </kbd>
