@@ -8,6 +8,7 @@ import {
   fileToFrame,
 } from '../utils/frames';
 import { ImageDropzone } from '../components/inspector/ImageDropzone';
+import { LiveCameraCapture } from '../components/inspector/LiveCameraCapture';
 import { SampleImageTray } from '../components/inspector/SampleImageTray';
 import { BatchCounts, ResultsPanel } from '../components/inspector/ResultsPanel';
 import { StatusFooter } from '../components/inspector/StatusFooter';
@@ -287,6 +288,10 @@ export function Inspector() {
             <SampleImageTray
               busy={busy}
               onSelect={(imageUrl) => void handleSampleSelect(imageUrl)}
+            />
+            <LiveCameraCapture
+              busy={busy}
+              onCapture={(file) => void handleImageFile(file)}
             />
             <ImageDropzone
               busy={busy}
