@@ -46,7 +46,7 @@ function AnnotatedPreview({ url, trayId }: { url: string; trayId: string }) {
           rel="noreferrer"
           className="font-code-metric text-label-sm text-[#0050cb] underline"
         >
-          Open full size
+          Open image
         </a>
       </div>
     </div>

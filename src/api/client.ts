@@ -72,7 +72,7 @@ class ApiClient {
 
   // Dashboard
   async getDashboardStats() {
-    const response = await this.client.get('/stats');
+    const response = await this.client.get('/dashboard/stats');
     return response.data;
   }
 

@@ -289,16 +289,16 @@ export function Inspector() {
               busy={busy}
               onSelect={(imageUrl) => void handleSampleSelect(imageUrl)}
             />
-            <LiveCameraCapture
-              busy={busy}
-              onCapture={(file) => void handleImageFile(file)}
-            />
             <ImageDropzone
               busy={busy}
               previewDataUrl={previewDataUrl}
               onUpload={handleUpload}
               onDropFile={(file) => void handleImageFile(file)}
               onDropSample={(imageUrl) => void handleSampleSelect(imageUrl)}
+            />
+            <LiveCameraCapture
+              busy={busy}
+              onCapture={(file) => void handleImageFile(file)}
             />
           </section>
 
