@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom';
 const links = [
   { to: '/', label: 'Dashboard', icon: 'dashboard', end: true },
   { to: '/inspect', label: 'Inspect Eggs', icon: 'egg', end: false },
-  { to: '/history', label: 'Batch History', icon: 'history', end: false },
+  { to: '/history', label: 'Inspection History', icon: 'history', end: false },
 ];
 
 export function Navbar() {

@@ -76,7 +76,7 @@ export function ImageDropzone({
       } ${busy ? 'cursor-wait' : 'cursor-pointer'}`}
       role="button"
       tabIndex={0}
-      aria-label="Drag and drop an egg tray image here, or browse to upload"
+      aria-label="Drag and drop an egg image here, or browse to upload"
       aria-busy={busy}
       onClick={() => {
         if (!busy) onUpload();
@@ -96,7 +96,7 @@ export function ImageDropzone({
         <div className="absolute inset-0 z-20">
           <img
             src={previewDataUrl}
-            alt="Uploaded tray being analyzed"
+            alt="Uploaded image being analyzed"
             className="h-full w-full bg-slate-950/90 object-contain"
           />
           <div className="absolute inset-0 bg-blue-950/35" />
@@ -124,7 +124,7 @@ export function ImageDropzone({
               Drag images here
             </h3>
             <p className="mt-1 font-body-md text-body-sm text-[#525b6a] sm:text-body-md">
-              Drop an egg tray photo to run automated inspection, or choose a
+              Drop a photo with any number of eggs to inspect them, or choose a
               file from your device.
             </p>
           </div>

@@ -1,109 +1,92 @@
 import { DetectionBox } from '../../types';
-import { formatMetric } from '../../utils/grading';
+import { decisionMeta, formatMetric, formatPercent, gradeLabel } from '../../utils/decisions';
+import { DecisionBadge, ReasonList } from '../DecisionBadge';
 
 interface EggResultCardProps {
   box: DetectionBox;
   index: number;
   thumbnail?: string;
+  cleanlinessApproved: boolean;
 }
 
-function Metric({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function Metric({ label, value, note }: { label: string; value: string; note?: string }) {
   return (
-    <div className="flex flex-col gap-0.5">
-      <span className="font-label-sm text-label-sm text-[#727687] uppercase tracking-wide">
+    <div className="flex min-w-0 flex-col gap-0.5">
+      <dt className="font-label-sm text-label-sm uppercase tracking-wide text-[#5b6170]">
         {label}
-      </span>
-      <span className="font-body-sm text-body-sm text-[#181c1f] font-medium truncate">
-        {value}
-      </span>
+        {note && (
+          <span className="ml-1 rounded bg-slate-100 px-1 py-px text-[10px] font-bold normal-case tracking-normal text-slate-600">
+            {note}
+          </span>
+        )}
+      </dt>
+      <dd className="truncate font-body-sm text-body-sm font-medium text-[#181c1f]">{value}</dd>
     </div>
   );
 }
 
-export function EggResultCard({
-  box,
-  index,
-  thumbnail,
-}: EggResultCardProps) {
-  const confidence = Math.round(box.confidence.detection * 100);
+function withConfidence(status: string | null | undefined, confidence: number | null | undefined) {
+  if (!status) return '—';
+  return confidence == null ? status : `${status} · ${formatPercent(confidence)}`;
+}
+
+export function EggResultCard({ box, index, thumbnail, cleanlinessApproved }: EggResultCardProps) {
   const eggId = String(box.egg_id ?? index).padStart(2, '0');
+  const meta = decisionMeta(box.decision);
+  const length = box.geometry.length_mm;
+  const breadth = box.geometry.breadth_mm;
 
   return (
-    <div
-      className="flex flex-col bg-white/85 backdrop-blur-xl border border-slate-200 rounded-2xl p-space-sm shadow-[0_4px_16px_0_rgba(0,80,203,0.06)] hover:bg-white hover:shadow-[0_8px_24px_rgba(0,102,255,0.12)] transition-all"
+    <article
+      aria-label={`Egg ${eggId}: ${meta.label}`}
+      className={`flex flex-col rounded-2xl border-2 bg-white/90 p-space-sm shadow-[0_4px_16px_0_rgba(0,80,203,0.06)] ${meta.borderClass}`}
       id={`egg-card-${index}`}
     >
-      <div className="flex items-start justify-between gap-space-xs pb-space-xs">
-        <div className="flex items-center gap-space-xs min-w-0">
-          <span className="font-headline-md text-headline-md text-[#181c1f] font-semibold">
-            Egg #{index}
-          </span>
-          <span className="font-label-sm text-label-sm text-[#727687] truncate">
-            ID: {eggId}
-          </span>
-        </div>
-      </div>
+      <header className="flex items-start justify-between gap-space-xs pb-space-xs">
+        <h3 className="font-headline-md text-headline-md font-semibold text-[#181c1f]">Egg {eggId}</h3>
+        <DecisionBadge decision={box.decision} size="sm" />
+      </header>
 
-      <div className="relative w-full aspect-video rounded-xl overflow-hidden my-space-xs bg-slate-100 border border-slate-200/80">
+      <div className="relative my-space-xs aspect-video w-full overflow-hidden rounded-xl border border-slate-200/80 bg-slate-100">
         {thumbnail ? (
-          <img
-            className="w-full h-full object-cover"
-            src={thumbnail}
-            alt={`Cropped inspection frame for egg ${index}`}
-          />
+          <img className="h-full w-full object-cover" src={thumbnail} alt={`Crop of egg ${eggId}`} />
         ) : (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-1 bg-gradient-to-br from-slate-50 to-blue-50 text-slate-400">
-            <span className="material-symbols-outlined text-[30px]">egg</span>
-            <span className="font-label-sm text-label-sm">NO CROP</span>
+          <div className="flex h-full w-full flex-col items-center justify-center gap-1 bg-gradient-to-br from-slate-50 to-blue-50 text-slate-500">
+            <span aria-hidden="true" className="material-symbols-outlined text-[30px]">egg</span>
+            <span className="font-label-sm text-label-sm">No crop preview</span>
           </div>
         )}
-        <div
-          className="absolute bottom-1 right-1 bg-white/90 backdrop-blur border border-slate-200 px-1.5 py-0.5 rounded font-code-metric text-label-sm font-bold shadow-xs text-slate-700"
-        >
-          {confidence}% INT
-        </div>
+        <span className="absolute bottom-1 right-1 rounded border border-slate-200 bg-white/90 px-1.5 py-0.5 font-code-metric text-label-sm font-bold text-slate-700">
+          Detection {formatPercent(box.confidence.detection)}
+        </span>
       </div>
 
-      <div className="grid grid-cols-2 gap-x-space-sm gap-y-space-xs pt-space-xs border-t border-slate-100">
-        <Metric label="Size" value={box.size ?? 'Unknown'} />
-        <Metric label="Length" value={box.geometry.length_mm == null ? '—' : `${box.geometry.length_mm.toFixed(1)} mm`} />
-        <Metric label="Breadth" value={box.geometry.breadth_mm == null ? '—' : `${box.geometry.breadth_mm.toFixed(1)} mm`} />
-        <Metric label="Damage" value={formatMetric(box.damage_status)} />
+      {box.decision && box.decision !== 'Acceptable' && (
+        <div className="mb-space-xs rounded-lg bg-slate-50 px-2.5 py-2">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-600">
+            {box.decision === 'Reject' ? 'Rejected because' : 'Review because'}
+          </p>
+          <ReasonList reasons={box.decision_reason} className="mt-1" />
+        </div>
+      )}
+      {!box.decision && (
+        <p className="mb-space-xs rounded-lg bg-slate-50 px-2.5 py-2 text-sm text-slate-600">
+          Recorded before quality decisions existed.
+        </p>
+      )}
+
+      <dl className="grid grid-cols-2 gap-x-space-sm gap-y-space-xs border-t border-slate-100 pt-space-xs">
+        <Metric label="Damage" value={withConfidence(box.damage_status, box.confidence.damage)} />
         <Metric
           label="Cleanliness"
-          value={formatMetric(box.cleanliness_status)}
+          note={cleanlinessApproved ? undefined : 'beta'}
+          value={withConfidence(box.cleanliness_status, box.confidence.cleanliness)}
         />
-      </div>
-
-    </div>
-  );
-}
-
-export function EggResultPlaceholder({ index }: { index: number }) {
-  return (
-    <div className="flex flex-col bg-white/50 backdrop-blur-xl border border-dashed border-slate-300/80 rounded-2xl p-space-sm min-h-[170px] sm:min-h-[210px]">
-      <div className="flex items-center justify-between pb-space-xs">
-        <span className="font-headline-md text-headline-md text-slate-400 font-semibold">
-          Egg #{index}
-        </span>
-        <span className="px-space-xs py-0.5 bg-slate-100 border border-slate-200 text-slate-400 font-label-sm text-label-sm rounded font-bold uppercase">
-          Awaiting
-        </span>
-      </div>
-      <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-xl bg-slate-50/70 border border-slate-100">
-        <span className="material-symbols-outlined text-[34px] text-slate-300">
-          egg
-        </span>
-        <span className="font-code-metric text-label-sm text-slate-400">
-          NO FRAME DATA
-        </span>
-      </div>
-    </div>
+        <Metric label="Size grade" value={gradeLabel(box.grade)} />
+        <Metric label="Size" value={formatMetric(box.size, '', 'Unknown')} />
+        <Metric label="Length" value={length == null ? '—' : `${length.toFixed(1)} mm`} />
+        <Metric label="Breadth" value={breadth == null ? '—' : `${breadth.toFixed(1)} mm`} />
+      </dl>
+    </article>
   );
 }

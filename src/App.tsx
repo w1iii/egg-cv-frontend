@@ -1,5 +1,5 @@
 import { Inspector } from './pages/Inspector';
-import { BatchHistoryPage } from './pages/BatchHistoryPage';
+import { InspectionHistoryPage } from './pages/InspectionHistoryPage';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { DashboardPage } from './pages/DashboardPage';
 
@@ -9,7 +9,7 @@ function App() {
       <Routes>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/inspect" element={<Inspector />} />
-        <Route path="/history" element={<BatchHistoryPage />} />
+        <Route path="/history" element={<InspectionHistoryPage />} />
       </Routes>
     </BrowserRouter>
   );

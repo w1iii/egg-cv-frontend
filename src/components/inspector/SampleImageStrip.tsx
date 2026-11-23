@@ -1,13 +1,13 @@
 import { DragEvent, useEffect, useState } from 'react';
 
-interface SampleImageTrayProps {
+interface SampleImageStripProps {
   busy: boolean;
   onSelect: (imageUrl: string) => void;
 }
 
 const SAMPLE_IMAGE_PATH = '/egg-images/';
 
-export function SampleImageTray({ busy, onSelect }: SampleImageTrayProps) {
+export function SampleImageStrip({ busy, onSelect }: SampleImageStripProps) {
   const [images, setImages] = useState<string[]>([]);
 
   useEffect(() => {
@@ -40,7 +40,7 @@ export function SampleImageTray({ busy, onSelect }: SampleImageTrayProps) {
     return (
       <div className="rounded-2xl border border-dashed border-blue-200/80 bg-white/55 px-space-md py-space-sm text-center">
         <p className="font-body-md text-body-md text-[#525b6a]">
-          Add egg images to <code>frontend/public/egg-images</code> and list
+          Add egg images to <code>public/egg-images</code> and list
           their filenames in <code>manifest.json</code>.
         </p>
       </div>

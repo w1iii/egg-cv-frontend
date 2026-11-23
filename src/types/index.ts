@@ -1,4 +1,7 @@
-export type Grade = 'A' | 'B' | 'C' | 'N/A' | 'Reject';
+/** External-quality decision. Separate from the commercial size grade. */
+export type Decision = 'Acceptable' | 'Reject' | 'Needs Review';
+/** Commercial size grade. Reject is a decision, never a grade. */
+export type Grade = 'A' | 'B' | 'C' | 'N/A';
 export type Size = 'Small' | 'Medium' | 'Large' | 'Unknown';
 export type DamageStatus = 'Damaged' | 'Not Damaged' | 'Needs Review';
 export type CleanlinessStatus =
@@ -38,8 +41,11 @@ export interface DetectionBox {
   x2: number;
   y2: number;
   annotated: boolean;
+  /** Null only for inspections recorded before decisions existed. */
+  decision?: Decision | null;
+  /** Semicolon-separated reason codes explaining the decision. */
+  decision_reason?: string | null;
   grade?: Grade | null;
-  provisional_grade?: Grade | null;
   size?: Size | null;
   weight_g?: number | null;
   damage_status?: DamageStatus | null;
@@ -50,28 +56,60 @@ export interface DetectionBox {
   model_versions: ModelVersions;
 }
 
+export interface CalibrationInfo {
+  status?: 'available' | 'unavailable' | string;
+  reason?: string | null;
+  mm_per_pixel?: number | null;
+}
+
+export interface ImageQualityInfo {
+  width?: number;
+  height?: number;
+  sharpness?: number;
+  reasons?: string[];
+}
+
+/** Known keys of Prediction.inference_metadata; legacy rows may lack any. */
+export interface InspectionMetadata {
+  decision_policy_version?: string;
+  cleanliness_model_available?: boolean;
+  cleanliness_release_approved?: boolean;
+  calibration?: CalibrationInfo;
+  sizing_available?: boolean;
+  size_calibrated?: boolean;
+  size_grades_approved?: boolean;
+  detection_count_status?: 'empty' | 'ok';
+  raw_detection_count?: number;
+  duplicate_boxes_removed?: number;
+  invalid_boxes_removed?: number;
+  image_quality?: ImageQualityInfo;
+  review_reason_counts?: Record<string, number>;
+  annotation_error?: string | null;
+  [key: string]: unknown;
+}
+
+/** One inspection: a single uploaded or captured still image. */
 export interface Prediction {
   id: number;
   file_name: string;
   file_type: string;
-  tray_id: string;
+  inspection_code: string;
   captured_at?: string | null;
   operator?: string | null;
-  inference_metadata?: Record<string, unknown> | null;
+  inference_metadata?: InspectionMetadata | null;
   status: string;
+  error_message?: string | null;
   total_detections: number;
+  acceptable_count: number;
+  reject_count: number;
+  needs_review_count: number;
   damaged_count: number;
   not_damaged_count: number;
-  needs_review_count: number;
-  batch_recorded: boolean;
-  batch_recorded_at: string | null;
-  okay_count: number;
-  stained_count: number;
-  batch_damaged_count: number;
-  batch_review_count: number;
   processing_time_ms: number | null;
   created_at: string;
   completed_at: string | null;
+  /** Null marks a legacy inspection recorded before decisions. */
+  decision_policy_version: string | null;
 }
 
 export interface PredictionDetail extends Prediction {
@@ -81,25 +119,23 @@ export interface PredictionDetail extends Prediction {
   detection_boxes: DetectionBox[];
 }
 
-export interface BatchSummary {
-  okay_count: number;
-  stained_count: number;
-  damaged_count: number;
-  review_count: number;
-  total_count: number;
-}
-
-export interface BatchRecord extends PredictionDetail {
-  batch: BatchSummary;
-}
-
 export interface DashboardStats {
   total_predictions: number;
   total_images: number;
   total_detections: number;
+  acceptable_count: number;
+  reject_count: number;
+  needs_review_count: number;
+  undecided_count: number;
   damaged_percentage: number;
   avg_processing_time_ms: number;
   recent_predictions: Prediction[];
+}
+
+export interface ModelInfo {
+  loaded: boolean;
+  file?: string | null;
+  sha256?: string | null;
 }
 
 export interface HealthStatus {
@@ -107,7 +143,11 @@ export interface HealthStatus {
   model_loaded: boolean;
   damage_model_loaded: boolean;
   cleanliness_model_loaded: boolean;
+  cleanliness_release_approved: boolean;
+  size_grades_approved: boolean;
+  weight_estimation_enabled: boolean;
   database_connected: boolean;
+  models?: Record<string, ModelInfo>;
 }
 
 export interface GradeDistribution {
@@ -115,12 +155,20 @@ export interface GradeDistribution {
   grade_b: number;
   grade_c: number;
   grade_na: number;
-  grade_reject: number;
   total: number;
 }
 
-export interface UserSettings {
-  mm_per_pixel: number;
+export interface DecisionDistribution {
+  acceptable: number;
+  reject: number;
+  needs_review: number;
+  undecided: number;
+  total: number;
+}
+
+export interface InspectionFilters {
+  decision?: Decision;
+  review_reason?: string;
 }
 
 export interface CapturedFrame {

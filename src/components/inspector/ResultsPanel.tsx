@@ -1,44 +1,35 @@
-import { useState } from 'react';
-import { PredictionDetail } from '../../types';
+import { useMemo, useState } from 'react';
+import { Decision, PredictionDetail } from '../../types';
 import { resolveApiUrl } from '../../api/client';
-import { EggResultCard, EggResultPlaceholder } from './EggResultCard';
+import { DECISION_META, DECISIONS, countDecisions, metadataOf, shortCode } from '../../utils/decisions';
+import { InspectionNotices } from '../InspectionNotices';
+import { EggResultCard } from './EggResultCard';
 
 interface ResultsPanelProps {
   result: PredictionDetail | null;
   crops: Record<number, string>;
-  onRecordBatch: () => void;
-  recording: boolean;
-  batchCounts: BatchCounts;
-}
-
-export interface BatchCounts {
-  good: number;
-  stained: number;
-  damaged: number;
 }
 
 const GRID_CLASS =
-  'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-space-sm sm:gap-space-md';
+  'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-space-sm sm:gap-space-md';
 
-function AnnotatedPreview({ url, trayId }: { url: string; trayId: string }) {
+function AnnotatedPreview({ url, label }: { url: string; label: string }) {
   const [failed, setFailed] = useState(false);
   if (failed) return null;
 
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center gap-space-sm rounded-2xl border border-slate-200 bg-slate-50/60 p-space-sm">
+    <div className="flex flex-col gap-space-sm rounded-2xl border border-slate-200 bg-slate-50/60 p-space-sm sm:flex-row sm:items-center">
       <img
         src={resolveApiUrl(url)}
-        alt={`Annotated image for ${trayId}`}
+        alt={`Annotated image for ${label}`}
         className="h-40 w-full rounded-xl border border-slate-200 bg-white object-contain sm:h-32 sm:w-auto sm:max-w-[45%]"
         loading="lazy"
         onError={() => setFailed(true)}
       />
       <div className="flex flex-col gap-space-xs">
-        <span className="font-code-metric text-label-sm text-[#424656] font-bold">
-          ANNOTATED FRAME
-        </span>
-        <span className="font-body-md text-body-md text-[#727687]">
-          Detector boxes overlaid on the uploaded tray.
+        <span className="font-code-metric text-label-sm font-bold text-[#424656]">ANNOTATED IMAGE</span>
+        <span className="font-body-md text-body-md text-[#5b6170]">
+          Each detected egg is outlined and labelled with its decision.
         </span>
         <a
           href={resolveApiUrl(url)}
@@ -53,154 +44,110 @@ function AnnotatedPreview({ url, trayId }: { url: string; trayId: string }) {
   );
 }
 
-export function ResultsPanel({
-  result,
-  crops,
-  onRecordBatch,
-  recording,
-  batchCounts,
-}: ResultsPanelProps) {
-  const boxes = result?.detection_boxes ?? [];
-  const counts = boxes.reduce(
-    (summary, box) => {
-      if (box.damage_status === 'Damaged') {
-        summary.damaged += 1;
-      } else if (box.cleanliness_status === 'Stained') {
-        summary.stained += 1;
-      } else {
-        summary.okay += 1;
-      }
-      return summary;
-    },
-    { okay: 0, stained: 0, damaged: 0 },
-  );
-  const trayLabel = result
-    ? `Tray #${result.tray_id.slice(0, 8).toUpperCase()}`
-    : 'Awaiting Image';
+export function ResultsPanel({ result, crops }: ResultsPanelProps) {
+  const [filter, setFilter] = useState<Decision | 'all'>('all');
+  const boxes = useMemo(() => result?.detection_boxes ?? [], [result]);
+  const counts = countDecisions(boxes);
+  const visible = filter === 'all' ? boxes : boxes.filter((box) => box.decision === filter);
+  const meta = metadataOf(result);
+  const label = result ? `Inspection ${shortCode(result.inspection_code)}` : 'Awaiting image';
   const processingTime = result?.processing_time_ms
-    ? `${(result.processing_time_ms / 1000).toFixed(2)}s`
+    ? `${(result.processing_time_ms / 1000).toFixed(2)} s`
     : '—';
-  const metadata = (result?.inference_metadata ?? {}) as Record<
-    string,
-    unknown
-  >;
-  const maxTrayEggs = Number(metadata.max_tray_eggs) || 5;
-  const cardCount = Math.max(boxes.length, maxTrayEggs);
+
   return (
-    <section className="flex flex-col bg-white/70 backdrop-blur-2xl border border-white/80 rounded-3xl p-space-sm sm:p-space-md shadow-[0_12px_36px_0_rgba(0,80,203,0.06)] gap-space-md">
-      <div className="flex flex-col gap-space-sm rounded-2xl border border-emerald-100 bg-emerald-50/60 p-space-sm sm:p-space-md">
-        <div className="flex flex-col gap-space-xs sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="font-headline-md text-headline-md text-[#181c1f] uppercase tracking-tight font-bold">
-              Current Batch
-            </h2>
-            <p className="font-body-sm text-body-sm text-[#727687]">
-              Counts reflect the last image until it is recorded.
-            </p>
-          </div>
-          {result && (
-            <button
-              type="button"
-              onClick={onRecordBatch}
-              disabled={recording || result.batch_recorded || boxes.length === 0}
-              className="inline-flex w-full items-center justify-center gap-1.5 rounded-full bg-[#0050cb] px-3 py-1.5 font-code-metric text-label-sm text-white font-bold hover:bg-[#003f9e] transition-colors disabled:opacity-40 disabled:cursor-not-allowed sm:w-auto"
-            >
-              <span className="material-symbols-outlined text-[16px]">
-                {recording ? 'sync' : 'save'}
-              </span>
-              {result.batch_recorded ? 'BATCH RECORDED' : 'RECORD BATCH'}
-            </button>
-          )}
+    <section
+      aria-labelledby="results-heading"
+      className="flex flex-col gap-space-md rounded-3xl border border-white/80 bg-white/70 p-space-sm shadow-[0_12px_36px_0_rgba(0,80,203,0.06)] backdrop-blur-2xl sm:p-space-md"
+    >
+      <div className="flex flex-col justify-between gap-space-sm rounded-2xl border border-blue-100/60 bg-gradient-to-r from-blue-50/80 to-emerald-50/50 p-space-sm sm:p-space-md xl:flex-row xl:items-center">
+        <div className="flex min-w-0 items-center gap-space-sm">
+          <span aria-hidden="true" className="material-symbols-outlined shrink-0 text-[22px] text-[#0066ff]">analytics</span>
+          <h2 id="results-heading" className="truncate font-headline-lg text-base font-bold uppercase leading-snug tracking-tight text-[#181c1f] sm:text-headline-lg">
+            {label}
+          </h2>
         </div>
-        <div className="grid grid-cols-3 gap-2 sm:gap-space-sm">
-          <Count label="GOOD EGGS" value={batchCounts.good} tone="text-emerald-700" />
-          <Count label="STAINED" value={batchCounts.stained} tone="text-amber-700" />
-          <Count label="DAMAGED" value={batchCounts.damaged} tone="text-red-700" />
-        </div>
-      </div>
-
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-space-sm bg-gradient-to-r from-blue-50/80 to-emerald-50/50 border border-blue-100/60 p-space-sm sm:p-space-md rounded-2xl">
-        <div className="flex items-center gap-space-sm min-w-0">
-          <span className="material-symbols-outlined text-[#0066ff] text-[22px] shrink-0">
-            analytics
-          </span>
-          <span className="font-headline-lg text-base leading-snug text-[#181c1f] uppercase tracking-tight font-bold truncate sm:text-headline-lg">
-            Last Image Results — {trayLabel}
-          </span>
-        </div>
-
         {result && (
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-space-sm rounded-2xl border border-slate-200 bg-white/80 p-space-sm sm:p-space-md">
-            <div className="grid grid-cols-3 gap-2 flex-1 sm:gap-space-sm">
-              <Count label="ACCEPTED" value={counts.okay} tone="text-emerald-700" />
-              <Count label="STAINED" value={counts.stained} tone="text-amber-700" />
-              <Count label="DAMAGED" value={counts.damaged} tone="text-red-700" />
-            </div>
+          <div className="flex flex-wrap items-center gap-space-xs">
+            <span className="rounded-full border border-blue-200/70 bg-white/80 px-3 py-1 font-code-metric text-label-sm font-bold text-[#0050cb]">
+              {boxes.length} {boxes.length === 1 ? 'EGG' : 'EGGS'} DETECTED
+            </span>
+            <span className="rounded-full border border-emerald-200/70 bg-white/80 px-3 py-1 font-code-metric text-label-sm font-bold text-emerald-700">
+              {processingTime} PROCESSING
+            </span>
           </div>
         )}
-
-        <div className="flex flex-wrap items-center gap-space-xs">
-          <span className="rounded-full bg-white/80 border border-blue-200/70 px-3 py-1 font-code-metric text-label-sm text-[#0050cb] font-bold">
-            {boxes.length} / {maxTrayEggs} DETECTED
-          </span>
-          <span className="rounded-full bg-white/80 border border-emerald-200/70 px-3 py-1 font-code-metric text-label-sm text-emerald-700 font-bold">
-            {processingTime} INFERENCE
-          </span>
-        </div>
       </div>
 
-      {result?.annotated_url && (
-        <AnnotatedPreview url={result.annotated_url} trayId={trayLabel} />
+      {!result && (
+        <p className="rounded-2xl border border-dashed border-slate-300 bg-white/60 px-4 py-8 text-center text-sm text-slate-600">
+          Upload a photo, pick a test image or capture a camera frame. Every egg in the image is
+          inspected on its own.
+        </p>
       )}
 
-      {result && (() => {
-        const calibration = metadata.calibration as { status?: string; reason?: string | null } | undefined;
-        const available = calibration?.status === 'available';
-        return <div role="status" className={`rounded-xl border p-3 text-sm ${available ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>
-          {available ? 'Marker detected. Size measurements are bounding-box estimates.' : `Sizing unavailable${calibration?.reason ? `: ${calibration.reason.replace(/_/g, ' ')}` : ''}. Place the marker fully in view and capture again.`}
-        </div>;
-      })()}
+      {result && (
+        <>
+          <div className="grid grid-cols-3 gap-2 sm:gap-space-sm" role="group" aria-label="Filter eggs by decision">
+            {DECISIONS.map((decision) => {
+              const active = filter === decision;
+              return (
+                <button
+                  key={decision}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setFilter(active ? 'all' : decision)}
+                  className={`rounded-xl border px-2 py-2 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0066ff] sm:px-3 ${
+                    active ? 'border-[#0066ff] bg-blue-50' : 'border-slate-200 bg-white/80 hover:border-blue-300'
+                  }`}
+                >
+                  <span className="block font-code-metric text-[10px] leading-tight text-[#5b6170] sm:text-label-sm">
+                    {DECISION_META[decision].label.toUpperCase()}
+                  </span>
+                  <span className={`block font-headline-lg text-xl font-bold sm:text-headline-lg ${DECISION_META[decision].countClass}`}>
+                    {counts[decision]}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
 
-      {result && boxes.length === 0 && (
-        <div className="rounded-2xl border border-dashed border-amber-300 bg-amber-50/70 px-4 py-3">
-          <p className="font-body-md text-body-md text-amber-900">
-            No eggs were detected in this image. Try another photo, or lower the
-            confidence threshold on the backend.
-          </p>
-        </div>
-      )}
+          <InspectionNotices result={result} />
 
-      <div className={GRID_CLASS} id="egg-cards-grid">
-        {boxes.length > 0
-          ? boxes.map((box, index) => (
+          {result.annotated_url && <AnnotatedPreview url={result.annotated_url} label={label} />}
+
+          {result.status === 'completed' && boxes.length === 0 && (
+            <div role="status" className="rounded-2xl border border-dashed border-amber-300 bg-amber-50/70 px-4 py-3">
+              <p className="font-body-md text-body-md text-amber-900">
+                No eggs were detected in this image
+                {meta.raw_detection_count ? ' (all candidate boxes were removed as duplicates or invalid)' : ''}.
+                Check framing and lighting, then try again.
+              </p>
+            </div>
+          )}
+
+          {filter !== 'all' && (
+            <p className="text-sm text-slate-600">
+              Showing {visible.length} of {boxes.length} eggs ({DECISION_META[filter].label.toLowerCase()}).{' '}
+              <button type="button" className="font-semibold text-[#0050cb] underline" onClick={() => setFilter('all')}>
+                Show all
+              </button>
+            </p>
+          )}
+
+          <div className={GRID_CLASS} id="egg-cards-grid">
+            {visible.map((box) => (
               <EggResultCard
                 key={box.id}
                 box={box}
-                index={index + 1}
+                index={boxes.indexOf(box) + 1}
                 thumbnail={crops[box.id]}
+                cleanlinessApproved={Boolean(meta.cleanliness_release_approved)}
               />
-            ))
-          : Array.from({ length: cardCount }, (_, index) => (
-              <EggResultPlaceholder key={`empty-${index}`} index={index + 1} />
             ))}
-      </div>
+          </div>
+        </>
+      )}
     </section>
-  );
-}
-
-function Count({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: number;
-  tone: string;
-}) {
-  return (
-    <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-2 py-2 sm:px-3">
-      <div className="font-code-metric text-[10px] leading-tight text-[#727687] sm:text-label-sm">{label}</div>
-      <div className={`font-headline-lg text-xl font-bold sm:text-headline-lg ${tone}`}>{value}</div>
-    </div>
   );
 }
