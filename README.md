@@ -15,6 +15,12 @@ Decision vocabulary and reason wording live in `src/utils/decisions.ts`; the
 backend test `tests/test_contracts.py` checks that `src/types/index.ts` uses
 the same decision and grade values as the API.
 
+Docs:
+
+- [`docs/architecture.md`](docs/architecture.md): pages, components, data flow, API contract, accessibility
+- [`docs/decisions-and-reasons.md`](docs/decisions-and-reasons.md): decision vs grade, release gates, every reason code and its wording
+- [`docs/verification.md`](docs/verification.md): quality gates and the manual check, including what was not verified
+
 ## Local development
 
 ```bash
