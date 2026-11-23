@@ -24,7 +24,7 @@ function captureVideoFrame(video: HTMLVideoElement): Promise<File> {
         reject(new Error('Could not create image from camera frame.'));
         return;
       }
-      resolve(new File([blob], `egg-tray-${Date.now()}.jpg`, { type: 'image/jpeg' }));
+      resolve(new File([blob], `egg-capture-${Date.now()}.jpg`, { type: 'image/jpeg' }));
     }, 'image/jpeg', 0.95);
   });
 }
@@ -132,11 +132,11 @@ export function LiveCameraCapture({ busy, onCapture }: LiveCameraCaptureProps) {
   useEffect(() => stopCamera, [stopCamera]);
 
   return (
-    <section className="rounded-2xl border border-blue-100 bg-white/80 p-4 shadow-sm sm:p-5" aria-label="Live camera inspection">
+    <section className="rounded-2xl border border-blue-100 bg-white/80 p-4 shadow-sm sm:p-5" aria-label="Camera still capture">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="font-headline-md text-lg text-[#181c1f]">Live camera</h2>
-          <p className="font-body-md text-sm text-[#525b6a]">Position the egg tray in view, then press Space or Capture.</p>
+          <h2 className="font-headline-md text-lg text-[#181c1f]">Camera capture</h2>
+          <p className="font-body-md text-sm text-[#525b6a]">Position the eggs in view, then press Space or Capture to inspect one still frame.</p>
         </div>
         <div className="flex gap-2">
           {cameraActive ? (
@@ -163,14 +163,14 @@ export function LiveCameraCapture({ busy, onCapture }: LiveCameraCaptureProps) {
         {!cameraActive && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center text-white">
             <span className="material-symbols-outlined text-4xl">videocam</span>
-            <p className="font-body-md text-sm">Start camera to preview the egg tray.</p>
+            <p className="font-body-md text-sm">Start the camera to preview the eggs.</p>
           </div>
         )}
         {busy && cameraActive && <div className="absolute inset-0 flex items-center justify-center bg-slate-950/55 text-white"><span className="rounded-full bg-black/60 px-4 py-2 font-semibold">Analyzing captured frame…</span></div>}
       </div>
 
       {cameraError && <p role="alert" className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{cameraError}</p>}
-      {cameraActive && <p className="mt-2 text-xs text-slate-500">Camera is active. Press Space to capture. Browser camera access requires HTTPS or localhost.</p>}
+      {cameraActive && <p className="mt-2 text-xs text-slate-500">Preview only: nothing is analyzed until you capture. Each capture creates one inspection. Camera access requires HTTPS or localhost.</p>}
     </section>
   );
 }

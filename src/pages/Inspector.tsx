@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiClient } from '../api/client';
 import { CapturedFrame, HealthStatus, PredictionDetail } from '../types';
 import { getErrorMessage } from '../utils/errorHandler';
+import { shortCode } from '../utils/decisions';
 import {
   buildCropThumbnails,
   fetchImageFile,
@@ -9,66 +10,39 @@ import {
 } from '../utils/frames';
 import { ImageDropzone } from '../components/inspector/ImageDropzone';
 import { LiveCameraCapture } from '../components/inspector/LiveCameraCapture';
-import { SampleImageTray } from '../components/inspector/SampleImageTray';
-import { BatchCounts, ResultsPanel } from '../components/inspector/ResultsPanel';
+import { SampleImageStrip } from '../components/inspector/SampleImageStrip';
+import { ResultsPanel } from '../components/inspector/ResultsPanel';
 import { StatusFooter } from '../components/inspector/StatusFooter';
 import { Navbar } from '../components/Navbar';
 
-const INSPECTOR_STORAGE_KEY = 'egg-cv:inspector-state';
+// v2: inspections replaced multi-image batch counts; v1 state is ignored.
+const INSPECTOR_STORAGE_KEY = 'egg-cv:inspector-state:v2';
 
 interface PersistedInspectorState {
   result: PredictionDetail | null;
   crops: Record<number, string>;
-  batchCounts: BatchCounts;
 }
 
-const emptyBatchCounts: BatchCounts = {
-  good: 0,
-  stained: 0,
-  damaged: 0,
-};
-
-function isBatchCounts(value: unknown): value is BatchCounts {
-  if (!value || typeof value !== 'object') return false;
-  const counts = value as Record<string, unknown>;
-  return (
-    typeof counts.good === 'number' &&
-    typeof counts.stained === 'number' &&
-    typeof counts.damaged === 'number'
-  );
-}
+const emptyState: PersistedInspectorState = { result: null, crops: {} };
 
 function readPersistedState(): PersistedInspectorState {
   try {
     const stored = window.localStorage.getItem(INSPECTOR_STORAGE_KEY);
-    if (!stored) {
-      return { result: null, crops: {}, batchCounts: emptyBatchCounts };
-    }
-
+    if (!stored) return emptyState;
     const parsed: unknown = JSON.parse(stored);
-    if (!parsed || typeof parsed !== 'object') {
-      return { result: null, crops: {}, batchCounts: emptyBatchCounts };
-    }
-
+    if (!parsed || typeof parsed !== 'object') return emptyState;
     const state = parsed as Record<string, unknown>;
     const result =
-      state.result && typeof state.result === 'object'
+      state.result && typeof state.result === 'object' && 'inspection_code' in state.result
         ? (state.result as PredictionDetail)
         : null;
     const crops =
       state.crops && typeof state.crops === 'object'
         ? (state.crops as Record<number, string>)
         : {};
-
-    return {
-      result,
-      crops,
-      batchCounts: isBatchCounts(state.batchCounts)
-        ? state.batchCounts
-        : emptyBatchCounts,
-    };
+    return { result, crops };
   } catch {
-    return { result: null, crops: {}, batchCounts: emptyBatchCounts };
+    return emptyState;
   }
 }
 
@@ -88,21 +62,17 @@ export function Inspector() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [health, setHealth] = useState<HealthStatus | null>(null);
-  const [recording, setRecording] = useState(false);
-  const [batchCounts, setBatchCounts] = useState<BatchCounts>(
-    persistedState.batchCounts,
-  );
 
   useEffect(() => {
     try {
       window.localStorage.setItem(
         INSPECTOR_STORAGE_KEY,
-        JSON.stringify({ result, crops, batchCounts }),
+        JSON.stringify({ result, crops }),
       );
     } catch {
-      setError('Unable to save inspection data in this browser.');
+      // Keeping the last result across reloads is a convenience only.
     }
-  }, [batchCounts, crops, result]);
+  }, [crops, result]);
 
   useEffect(() => {
     let active = true;
@@ -129,31 +99,13 @@ export function Inspector() {
     setError(null);
     setPreviewDataUrl(frame.dataUrl);
     try {
-      const detail: PredictionDetail = await apiClient.gradeImage(frame.file);
+      const detail = await apiClient.inspectImage(frame.file);
       let thumbnails: Record<number, string> = {};
       try {
         thumbnails = await buildCropThumbnails(frame, detail.detection_boxes);
       } catch {
         thumbnails = {};
       }
-      const captureCounts = detail.detection_boxes.reduce(
-        (summary, box) => {
-          if (box.damage_status === 'Damaged') {
-            summary.damaged += 1;
-          } else if (box.cleanliness_status === 'Stained') {
-            summary.stained += 1;
-          } else {
-            summary.good += 1;
-          }
-          return summary;
-        },
-        { good: 0, stained: 0, damaged: 0 },
-      );
-      setBatchCounts((current) => ({
-        good: current.good + captureCounts.good,
-        stained: current.stained + captureCounts.stained,
-        damaged: current.damaged + captureCounts.damaged,
-      }));
       setResult(detail);
       setCrops(thumbnails);
     } catch (err) {
@@ -238,12 +190,12 @@ export function Inspector() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [handleUpload]);
 
-  const exportBatch = useCallback(() => {
+  const exportInspection = useCallback(() => {
     if (!result) return;
     const payload = {
-      tray_id: result.tray_id,
+      inspection_code: result.inspection_code,
       exported_at: new Date().toISOString(),
-      prediction: result,
+      inspection: result,
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], {
       type: 'application/json',
@@ -251,26 +203,10 @@ export function Inspector() {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = `egg-tray-${result.tray_id.slice(0, 8)}.json`;
+    anchor.download = `egg-inspection-${shortCode(result.inspection_code)}.json`;
     anchor.click();
     URL.revokeObjectURL(url);
   }, [result]);
-
-  const recordBatch = useCallback(async () => {
-    if (!result || recording) return;
-    setRecording(true);
-    setError(null);
-    try {
-      await apiClient.recordBatch(result.id, batchCounts);
-      setBatchCounts(emptyBatchCounts);
-      setResult(null);
-      setCrops({});
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setRecording(false);
-    }
-  }, [batchCounts, recording, result]);
 
   return (
     <main className="w-full bg-[#f8fbfe] bg-[radial-gradient(ellipse_90%_70%_at_20%_-10%,rgba(0,102,255,0.09),transparent_60%),radial-gradient(ellipse_80%_60%_at_85%_15%,rgba(39,223,188,0.11),transparent_55%),radial-gradient(ellipse_90%_60%_at_50%_105%,rgba(16,185,129,0.08),transparent_60%),radial-gradient(circle_at_50%_45%,rgba(255,255,255,0.85),rgba(240,246,253,0.95))] min-h-screen relative overflow-hidden">
@@ -285,8 +221,15 @@ export function Inspector() {
           <Navbar />
 
           <section className="relative flex flex-col gap-space-md overflow-hidden rounded-3xl border border-white/80 bg-white/70 p-space-sm shadow-[0_12px_36px_0_rgba(0,80,203,0.07)] backdrop-blur-2xl sm:p-space-md">
-            <p className="text-sm text-slate-600">For sizing, keep the fixed camera and tray in place and include the full 50 mm ArUco marker (DICT_4X4_50, ID 0) in the image.</p>
-            <SampleImageTray
+            <p className="text-sm text-slate-600">
+              Each image is one inspection: every egg in view is detected and decided on its own.
+              For sizing, keep the camera fixed and include the full 50 mm ArUco marker
+              (DICT_4X4_50, ID 0) with a white margin in the image.
+            </p>
+            <p className="sr-only" role="status" aria-live="polite">
+              {busy ? 'Analyzing image' : result ? `Inspection complete: ${result.total_detections} eggs` : ''}
+            </p>
+            <SampleImageStrip
               busy={busy}
               onSelect={(imageUrl) => void handleSampleSelect(imageUrl)}
             />
@@ -304,7 +247,7 @@ export function Inspector() {
           </section>
 
           {error && (
-            <div className="rounded-2xl border border-red-200 bg-red-50/90 px-4 py-3 shadow-sm">
+            <div role="alert" className="rounded-2xl border border-red-200 bg-red-50/90 px-4 py-3 shadow-sm">
               <div className="flex items-start gap-2">
                 <span className="material-symbols-outlined text-[20px] text-red-600">
                   error
@@ -314,18 +257,8 @@ export function Inspector() {
             </div>
           )}
 
-          <ResultsPanel
-            result={result}
-            crops={crops}
-            onRecordBatch={() => void recordBatch()}
-            recording={recording}
-            batchCounts={{
-              good: batchCounts.good,
-              stained: batchCounts.stained,
-              damaged: batchCounts.damaged,
-            }}
-          />
-          <StatusFooter health={health} result={result} onExport={exportBatch} />
+          <ResultsPanel result={result} crops={crops} />
+          <StatusFooter health={health} result={result} onExport={exportInspection} />
         </div>
       </div>
 
@@ -333,6 +266,7 @@ export function Inspector() {
         ref={fileInputRef}
         type="file"
         accept="image/jpeg,image/png,image/webp,image/bmp"
+        aria-label="Choose an egg image to inspect"
         className="hidden"
         onChange={(event) => void handleFileChange(event)}
       />

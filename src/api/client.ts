@@ -1,4 +1,13 @@
 import axios, { AxiosInstance } from 'axios';
+import {
+  DashboardStats,
+  DecisionDistribution,
+  GradeDistribution,
+  HealthStatus,
+  InspectionFilters,
+  Prediction,
+  PredictionDetail,
+} from '../types';
 
 const configuredApiUrl = (import.meta.env.VITE_API_URL as string | undefined)?.replace(
   /\/+$/,
@@ -22,16 +31,16 @@ class ApiClient {
     });
   }
 
-  // Grading
-  async gradeImage(
+  /** Inspect one still image. Every detected egg is graded individually. */
+  async inspectImage(
     file: File,
     confidenceThreshold = 0.75,
     saveAnnotated = true,
-  ) {
+  ): Promise<PredictionDetail> {
     const formData = new FormData();
     formData.append('file', file);
 
-    const response = await this.client.post('/grade', formData, {
+    const response = await this.client.post('/predictions/upload', formData, {
       params: {
         confidence_threshold: confidenceThreshold,
         save_annotated: saveAnnotated,
@@ -41,59 +50,45 @@ class ApiClient {
     return response.data;
   }
 
-  async getPredictions(skip = 0, limit = 20) {
-    const response = await this.client.get('/records', {
-      params: { skip, limit },
+  async getInspections(
+    skip = 0,
+    limit = 20,
+    filters: InspectionFilters = {},
+  ): Promise<Prediction[]> {
+    const response = await this.client.get('/predictions', {
+      params: { skip, limit, ...filters },
     });
     return response.data;
   }
 
-  async recordBatch(
-    id: number,
-    counts: { good: number; stained: number; damaged: number },
-  ) {
-    const response = await this.client.post(`/predictions/${id}/record`, {
-      okay_count: counts.good,
-      stained_count: counts.stained,
-      damaged_count: counts.damaged,
-    });
-    return response.data;
-  }
-
-  async getPrediction(id: number) {
+  async getInspection(id: number): Promise<PredictionDetail> {
     const response = await this.client.get(`/predictions/${id}`);
     return response.data;
   }
 
-  async deletePrediction(id: number) {
+  async deleteInspection(id: number) {
     const response = await this.client.delete(`/predictions/${id}`);
     return response.data;
   }
 
   // Dashboard
-  async getDashboardStats() {
+  async getDashboardStats(): Promise<DashboardStats> {
     const response = await this.client.get('/dashboard/stats');
     return response.data;
   }
 
-  async getHealth() {
+  async getHealth(): Promise<HealthStatus> {
     const response = await this.client.get('/dashboard/health');
     return response.data;
   }
 
-  async getGradeDistribution() {
+  async getGradeDistribution(): Promise<GradeDistribution> {
     const response = await this.client.get('/dashboard/grades');
     return response.data;
   }
 
-  // Settings
-  async getSettings() {
-    const response = await this.client.get('/settings');
-    return response.data;
-  }
-
-  async updateSettings(settings: { mm_per_pixel: number }) {
-    const response = await this.client.put('/settings', settings);
+  async getDecisionDistribution(): Promise<DecisionDistribution> {
+    const response = await this.client.get('/dashboard/decisions');
     return response.data;
   }
 }
