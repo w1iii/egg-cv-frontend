@@ -132,7 +132,7 @@ export function ResultsPanel({
         {result && (
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-space-sm rounded-2xl border border-slate-200 bg-white/80 p-space-sm sm:p-space-md">
             <div className="grid grid-cols-3 gap-2 flex-1 sm:gap-space-sm">
-              <Count label="OKAY" value={counts.okay} tone="text-emerald-700" />
+              <Count label="ACCEPTED" value={counts.okay} tone="text-emerald-700" />
               <Count label="STAINED" value={counts.stained} tone="text-amber-700" />
               <Count label="DAMAGED" value={counts.damaged} tone="text-red-700" />
             </div>
@@ -152,6 +152,14 @@ export function ResultsPanel({
       {result?.annotated_url && (
         <AnnotatedPreview url={result.annotated_url} trayId={trayLabel} />
       )}
+
+      {result && (() => {
+        const calibration = metadata.calibration as { status?: string; reason?: string | null } | undefined;
+        const available = calibration?.status === 'available';
+        return <div role="status" className={`rounded-xl border p-3 text-sm ${available ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>
+          {available ? 'Marker detected. Size measurements are bounding-box estimates.' : `Sizing unavailable${calibration?.reason ? `: ${calibration.reason.replace(/_/g, ' ')}` : ''}. Place the marker fully in view and capture again.`}
+        </div>;
+      })()}
 
       {result && boxes.length === 0 && (
         <div className="rounded-2xl border border-dashed border-amber-300 bg-amber-50/70 px-4 py-3">

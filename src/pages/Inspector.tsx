@@ -285,6 +285,7 @@ export function Inspector() {
           <Navbar />
 
           <section className="relative flex flex-col gap-space-md overflow-hidden rounded-3xl border border-white/80 bg-white/70 p-space-sm shadow-[0_12px_36px_0_rgba(0,80,203,0.07)] backdrop-blur-2xl sm:p-space-md">
+            <p className="text-sm text-slate-600">For sizing, keep the fixed camera and tray in place and include the full 50 mm ArUco marker (DICT_4X4_50, ID 0) in the image.</p>
             <SampleImageTray
               busy={busy}
               onSelect={(imageUrl) => void handleSampleSelect(imageUrl)}

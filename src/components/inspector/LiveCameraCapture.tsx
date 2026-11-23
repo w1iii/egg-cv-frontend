@@ -34,6 +34,15 @@ export function LiveCameraCapture({ busy, onCapture }: LiveCameraCaptureProps) {
   const streamRef = useRef<MediaStream | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
+  const [selectedCamera, setSelectedCamera] = useState('');
+
+  const refreshCameras = useCallback(async () => {
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+    const devices = (await navigator.mediaDevices.enumerateDevices()).filter((device) => device.kind === 'videoinput');
+    setCameras(devices);
+    setSelectedCamera((current) => devices.some((device) => device.deviceId === current) ? current : devices[0]?.deviceId ?? '');
+  }, []);
 
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -42,7 +51,7 @@ export function LiveCameraCapture({ busy, onCapture }: LiveCameraCaptureProps) {
     setCameraActive(false);
   }, []);
 
-  const startCamera = useCallback(async () => {
+  const startCamera = useCallback(async (deviceId = selectedCamera) => {
     setCameraError(null);
     if (!navigator.mediaDevices?.getUserMedia) {
       setCameraError('Camera access is unavailable. Use HTTPS or localhost, or upload an image instead.');
@@ -52,7 +61,12 @@ export function LiveCameraCapture({ busy, onCapture }: LiveCameraCaptureProps) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: false,
-        video: { facingMode: { ideal: 'environment' } },
+        video: {
+          ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: { ideal: 'environment' } }),
+          width: { ideal: 3840 },
+          height: { ideal: 2160 },
+          aspectRatio: { ideal: 16 / 9 },
+        },
       });
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = stream;
@@ -61,6 +75,7 @@ export function LiveCameraCapture({ busy, onCapture }: LiveCameraCaptureProps) {
         await videoRef.current.play();
       }
       setCameraActive(true);
+      await refreshCameras();
     } catch (error) {
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
@@ -73,7 +88,19 @@ export function LiveCameraCapture({ busy, onCapture }: LiveCameraCaptureProps) {
         setCameraError('Could not start camera. Check that it is connected and not being used by another app.');
       }
     }
-  }, []);
+  }, [refreshCameras, selectedCamera]);
+
+  useEffect(() => {
+    void refreshCameras();
+    navigator.mediaDevices?.addEventListener?.('devicechange', refreshCameras);
+    return () => navigator.mediaDevices?.removeEventListener?.('devicechange', refreshCameras);
+  }, [refreshCameras]);
+
+  const switchCamera = useCallback(async (deviceId: string) => {
+    setSelectedCamera(deviceId);
+    stopCamera();
+    await startCamera(deviceId);
+  }, [startCamera, stopCamera]);
 
   const capture = useCallback(async () => {
     if (!cameraActive || busy || !videoRef.current) return;
@@ -121,6 +148,14 @@ export function LiveCameraCapture({ busy, onCapture }: LiveCameraCaptureProps) {
             <button type="button" onClick={() => void startCamera()} disabled={busy} className="rounded-xl bg-[#0066ff] px-4 py-2 font-semibold text-white hover:bg-[#0050cb] disabled:opacity-60">Start camera</button>
           )}
         </div>
+      </div>
+
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <label htmlFor="camera-device" className="text-sm font-semibold text-slate-700">Switch camera</label>
+        <select id="camera-device" value={selectedCamera} onChange={(event) => void switchCamera(event.target.value)} disabled={!cameras.length || busy} className="max-w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 disabled:opacity-60">
+          {cameras.length ? cameras.map((camera, index) => <option key={camera.deviceId} value={camera.deviceId}>{camera.label || `Camera ${index + 1}`}</option>) : <option value="">No cameras detected</option>}
+        </select>
+        {!cameras.length && <button type="button" onClick={() => void startCamera()} disabled={busy} className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700">Detect cameras</button>}
       </div>
 
       <div className="relative aspect-video min-h-[220px] overflow-hidden rounded-xl bg-slate-950 sm:min-h-[300px]">
