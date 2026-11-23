@@ -71,6 +71,9 @@ export function EggResultCard({
       </div>
 
       <div className="grid grid-cols-2 gap-x-space-sm gap-y-space-xs pt-space-xs border-t border-slate-100">
+        <Metric label="Size" value={box.size ?? 'Unknown'} />
+        <Metric label="Length" value={box.geometry.length_mm == null ? '—' : `${box.geometry.length_mm.toFixed(1)} mm`} />
+        <Metric label="Breadth" value={box.geometry.breadth_mm == null ? '—' : `${box.geometry.breadth_mm.toFixed(1)} mm`} />
         <Metric label="Damage" value={formatMetric(box.damage_status)} />
         <Metric
           label="Cleanliness"
