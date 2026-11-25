@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { apiClient, resolveApiUrl } from '../api/client';
-import { Batch, Decision, DetectionBox, InspectionFilters, Prediction, PredictionDetail } from '../types';
+import { Batch, Decision, InspectionFilters, Prediction, PredictionDetail } from '../types';
 import { Navbar } from '../components/Navbar';
 import { DecisionBadge, ReasonList } from '../components/DecisionBadge';
 import { InspectionNotices } from '../components/InspectionNotices';
+import type { DetectionBox } from '../types';
 import {
   DECISIONS,
   DECISION_META,
