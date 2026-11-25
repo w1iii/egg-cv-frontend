@@ -5,7 +5,6 @@ interface ImageDropzoneProps {
   previewDataUrl: string | null;
   onUpload: () => void;
   onDropFile: (file: File) => void;
-  onDropSample: (url: string) => void;
 }
 
 const IMAGE_TYPE = /^image\//;
@@ -15,7 +14,6 @@ export function ImageDropzone({
   previewDataUrl,
   onUpload,
   onDropFile,
-  onDropSample,
 }: ImageDropzoneProps) {
   const [dropActive, setDropActive] = useState(false);
   const dragDepth = useRef(0);
@@ -47,12 +45,6 @@ export function ImageDropzone({
     dragDepth.current = 0;
     setDropActive(false);
     if (busy) return;
-
-    const sampleUrl = event.dataTransfer.getData('text/egg-cv-sample');
-    if (sampleUrl) {
-      onDropSample(sampleUrl);
-      return;
-    }
 
     const file = Array.from(event.dataTransfer.files).find((item) =>
       IMAGE_TYPE.test(item.type),

@@ -29,21 +29,6 @@ export async function fileToFrame(file: File): Promise<CapturedFrame> {
   };
 }
 
-export async function fetchImageFile(url: string): Promise<File> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error('Could not load the sample image. Try again.');
-  }
-
-  const blob = await response.blob();
-  if (!blob.type.startsWith('image/')) {
-    throw new Error('The selected sample is not an image.');
-  }
-
-  const filename = decodeURIComponent(url.split('/').pop() ?? 'egg-sample');
-  return new File([blob], filename, { type: blob.type });
-}
-
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }

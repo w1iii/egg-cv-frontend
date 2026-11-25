@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { apiClient, resolveApiUrl } from '../api/client';
-import { Batch, Decision, InspectionFilters, Prediction, PredictionDetail } from '../types';
+import { Batch, Decision, DetectionBox, InspectionFilters, Prediction, PredictionDetail } from '../types';
 import { Navbar } from '../components/Navbar';
 import { DecisionBadge, ReasonList } from '../components/DecisionBadge';
 import { InspectionNotices } from '../components/InspectionNotices';
@@ -10,6 +10,8 @@ import {
   DECISION_META,
   REASON_LABELS,
   countDecisions,
+  decisionMeta,
+  formatMetric,
   formatPercent,
   gradeLabel,
   isLegacy,
@@ -73,6 +75,71 @@ function HistoryCard({ item, onOpen }: { item: Prediction; onOpen: () => void })
   );
 }
 
+function Field({ label, value, note }: { label: string; value: string; note?: string }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        {label}
+        {note && (
+          <span className="ml-1 rounded bg-slate-100 px-1 py-px text-[10px] font-bold normal-case tracking-normal text-slate-600">
+            {note}
+          </span>
+        )}
+      </dt>
+      <dd className="truncate text-sm font-medium text-slate-900">{value}</dd>
+    </div>
+  );
+}
+
+function withConfidence(status: string | null | undefined, confidence: number | null | undefined) {
+  if (!status) return '—';
+  return confidence == null ? status : `${status} · ${formatPercent(confidence)}`;
+}
+
+function DetailEgg({ egg, index, cleanlinessApproved }: { egg: DetectionBox; index: number; cleanlinessApproved: boolean }) {
+  const eggId = String(egg.egg_id ?? index + 1).padStart(2, '0');
+  const meta = decisionMeta(egg.decision);
+  const length = egg.geometry.length_mm;
+  const breadth = egg.geometry.breadth_mm;
+  // Only show size fields when something was measured; otherwise the sizing notice explains why.
+  const measured = length != null || breadth != null || (egg.size != null && egg.size !== 'Unknown');
+  return (
+    <article aria-label={`Egg ${eggId}: ${meta.label}`} className={`rounded-xl border-2 bg-white p-3 ${meta.borderClass}`}>
+      <header className="flex items-center justify-between gap-2">
+        <h4 className="font-semibold text-slate-900">Egg {eggId}</h4>
+        <DecisionBadge decision={egg.decision} size="sm" />
+      </header>
+      {egg.decision && egg.decision !== 'Acceptable' && (
+        <div className="mt-2 rounded-lg bg-slate-50 px-2.5 py-2">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-slate-600">
+            {egg.decision === 'Reject' ? 'Rejected because' : 'Review because'}
+          </p>
+          <ReasonList reasons={egg.decision_reason} className="mt-1" />
+        </div>
+      )}
+      <dl className="mt-3 grid grid-cols-3 gap-x-3 gap-y-2">
+        <Field label="Damage" value={withConfidence(egg.damage_status, egg.confidence.damage)} />
+        <Field
+          label="Cleanliness"
+          note={cleanlinessApproved ? undefined : 'beta'}
+          value={withConfidence(egg.cleanliness_status, egg.confidence.cleanliness)}
+        />
+        <Field label="Detection" value={formatPercent(egg.confidence.detection)} />
+        {measured && (
+          <>
+            <Field label="Size grade" value={gradeLabel(egg.grade)} />
+            <Field label="Size" value={formatMetric(egg.size, '', 'Unknown')} />
+            <Field
+              label="L × B"
+              value={`${length == null ? '—' : length.toFixed(1)} × ${breadth == null ? '—' : breadth.toFixed(1)} mm`}
+            />
+          </>
+        )}
+      </dl>
+    </article>
+  );
+}
+
 function DetailDrawer({
   detail,
   loading,
@@ -110,34 +177,52 @@ function DetailDrawer({
         aria-labelledby="inspection-detail-title"
         className="h-full w-full overflow-y-auto bg-[#f8fafc] p-4 shadow-2xl sm:max-w-xl sm:p-6"
       >
-        <div className="mb-5 flex items-center justify-between">
-          <div>
+        <header className="mb-4 flex items-start justify-between gap-3">
+          <div className="min-w-0">
             <p className="text-xs font-bold uppercase tracking-wider text-blue-700">Inspection details</p>
-            <h2 id="inspection-detail-title" className="mt-1 text-xl font-bold text-slate-900">
+            <h2 id="inspection-detail-title" className="mt-0.5 text-xl font-bold text-slate-900">
               {detail ? `Inspection ${shortCode(detail.inspection_code)}` : 'Loading…'}
             </h2>
+            {detail && !loading && (
+              <p className="mt-1 truncate text-xs text-slate-500">
+                {new Date(detail.captured_at ?? detail.created_at).toLocaleString()} · {detail.file_name}
+                {detail.processing_time_ms != null && ` · ${detail.processing_time_ms} ms`}
+              </p>
+            )}
           </div>
           <button
             type="button"
             aria-label="Close details"
             onClick={onClose}
-            className="rounded-full bg-white px-3 py-2 text-slate-700 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-slate-700 shadow-sm hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
           >
-            ✕
+            <span aria-hidden="true" className="material-symbols-outlined text-[20px]">close</span>
           </button>
-        </div>
+        </header>
         {loading && <p className="py-12 text-center text-slate-600">Loading details…</p>}
         {!loading && detail && (
-          <>
-            <p className="text-sm text-slate-600">
-              {new Date(detail.captured_at ?? detail.created_at).toLocaleString()} · {detail.file_name}
-              {detail.processing_time_ms != null && ` · ${detail.processing_time_ms} ms`}
-            </p>
-            <div className="mt-4">
-              <InspectionNotices result={detail} />
-            </div>
+          <div className="flex flex-col gap-4">
+            {detail.annotated_url && (
+              <a
+                href={resolveApiUrl(detail.annotated_url)}
+                target="_blank"
+                rel="noreferrer"
+                className="group block overflow-hidden rounded-xl border border-slate-200 bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+              >
+                <img
+                  src={resolveApiUrl(detail.annotated_url)}
+                  alt={`Annotated image for inspection ${shortCode(detail.inspection_code)}`}
+                  className="max-h-64 w-full object-contain"
+                />
+                <span className="flex items-center justify-center gap-1 border-t border-slate-200 bg-white py-1.5 text-xs font-semibold text-blue-700 group-hover:underline">
+                  Open full size
+                  <span aria-hidden="true" className="material-symbols-outlined text-[14px]">open_in_new</span>
+                </span>
+              </a>
+            )}
+            <InspectionNotices result={detail} compact />
             {!isLegacy(detail) && (
-              <div className="mt-5 grid grid-cols-3 gap-2" role="group" aria-label="Filter eggs by decision">
+              <div className="grid grid-cols-3 gap-2" role="group" aria-label="Filter eggs by decision">
                 {DECISIONS.map((decision) => {
                   const active = filter === decision;
                   return (
@@ -146,54 +231,39 @@ function DetailDrawer({
                       type="button"
                       aria-pressed={active}
                       onClick={() => setFilter(active ? 'all' : decision)}
-                      className={`rounded-xl border p-3 text-left ${active ? 'border-blue-600 bg-blue-50' : 'border-slate-200 bg-white'}`}
+                      className={`rounded-xl border px-3 py-2 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 ${active ? 'border-blue-600 bg-blue-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}
                     >
-                      <span className="block text-xs font-semibold uppercase tracking-wide text-slate-600">
+                      <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-600">
                         {DECISION_META[decision].label}
                       </span>
-                      <span className={`block text-2xl font-bold ${DECISION_META[decision].countClass}`}>{counts[decision]}</span>
+                      <span className={`block text-xl font-bold ${DECISION_META[decision].countClass}`}>{counts[decision]}</span>
                     </button>
                   );
                 })}
               </div>
             )}
-            <h3 className="mb-3 mt-7 font-bold text-slate-900">
-              Egg results {filter !== 'all' && `· ${DECISION_META[filter].label.toLowerCase()}`}
-            </h3>
-            {eggs.length === 0 && <p className="text-sm text-slate-600">No eggs were detected in this image.</p>}
-            <div className="space-y-2">
-              {visible.map((egg, index) => (
-                <article key={egg.id} className="rounded-xl border border-slate-200 bg-white p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-semibold text-slate-800">
-                      Egg {String(egg.egg_id ?? index + 1).padStart(2, '0')}
-                    </span>
-                    <DecisionBadge decision={egg.decision} size="sm" />
-                  </div>
-                  <ReasonList reasons={egg.decision_reason} className="mt-2" />
-                  <p className="mt-2 text-sm text-slate-600">
-                    Damage: {egg.damage_status ?? '—'} ({formatPercent(egg.confidence.damage)}) · Cleanliness
-                    {cleanlinessApproved ? '' : ' (beta)'}: {egg.cleanliness_status ?? '—'} ({formatPercent(egg.confidence.cleanliness)})
-                  </p>
-                  <p className="mt-1 text-sm text-slate-600">
-                    Size grade: {gradeLabel(egg.grade)} · Size: {egg.size ?? 'Unknown'} · Length:{' '}
-                    {egg.geometry.length_mm == null ? '—' : `${egg.geometry.length_mm} mm`} · Detection{' '}
-                    {formatPercent(egg.confidence.detection)}
-                  </p>
-                </article>
-              ))}
-            </div>
-            {detail.annotated_url && (
-              <a
-                className="mt-5 block rounded-xl bg-blue-700 px-4 py-3 text-center text-sm font-bold text-white"
-                href={resolveApiUrl(detail.annotated_url)}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Open annotated image
-              </a>
-            )}
-          </>
+            <section aria-labelledby="egg-results-title">
+              <div className="mb-2 flex items-baseline justify-between gap-2">
+                <h3 id="egg-results-title" className="font-bold text-slate-900">
+                  Egg results {filter !== 'all' && `· ${DECISION_META[filter].label.toLowerCase()}`}
+                </h3>
+                <span className="text-xs text-slate-500">
+                  {visible.length} of {eggs.length}
+                  {filter !== 'all' && (
+                    <button type="button" onClick={() => setFilter('all')} className="ml-2 font-semibold text-blue-700 underline">
+                      Show all
+                    </button>
+                  )}
+                </span>
+              </div>
+              {eggs.length === 0 && <p className="text-sm text-slate-600">No eggs were detected in this image.</p>}
+              <div className="space-y-2">
+                {visible.map((egg, index) => (
+                  <DetailEgg key={egg.id} egg={egg} index={index} cleanlinessApproved={cleanlinessApproved} />
+                ))}
+              </div>
+            </section>
+          </div>
         )}
       </aside>
     </div>
