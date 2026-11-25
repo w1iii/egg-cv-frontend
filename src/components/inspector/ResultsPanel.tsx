@@ -71,7 +71,7 @@ export function ResultsPanel({ result, crops, pending, saving, busy, savedBatch,
             <h2 className="font-bold text-slate-900">Current batch</h2>
             <p className="text-sm text-slate-600">{pending.length} inspections · {pending.reduce((n, item) => n + item.total_detections, 0)} eggs</p>
             <p className="text-sm text-slate-600">{pending.reduce((n, item) => n + item.acceptable_count, 0)} acceptable · {pending.reduce((n, item) => n + item.reject_count, 0)} reject · {pending.reduce((n, item) => n + item.needs_review_count, 0)} review</p>
-            {savedBatch !== null && <p role="status" className="text-sm text-emerald-800">Batch #{savedBatch} saved. View it in inspection history.</p>}
+            {savedBatch !== null && <p role="status" className="text-sm text-emerald-800">Batch #{savedBatch} saved. Its inspections are listed in Inspection History.</p>}
           </div>
           <button type="button" onClick={onSaveBatch} disabled={!pending.length || saving || busy} className="rounded-full bg-blue-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-40">{saving ? 'Saving…' : 'Save batch'}</button>
         </div>

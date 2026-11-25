@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { apiClient, resolveApiUrl } from '../api/client';
-import { Batch, Decision, InspectionFilters, Prediction, PredictionDetail } from '../types';
+import { Decision, InspectionFilters, Prediction, PredictionDetail } from '../types';
 import { Navbar } from '../components/Navbar';
 import { DecisionBadge, ReasonList } from '../components/DecisionBadge';
 import { InspectionNotices } from '../components/InspectionNotices';
@@ -17,7 +17,64 @@ import {
 } from '../utils/decisions';
 import { getErrorMessage } from '../utils/errorHandler';
 
-const PAGE_SIZE = 20;
+// Inspections shown per page.
+const PAGE_SIZE = 5;
+// Rows per API request (the backend caps limit at 100) and a safety cap on requests.
+const FETCH_SIZE = 100;
+const MAX_FETCH_REQUESTS = 50;
+
+/** Page numbers to show, with null marking a gap: 1 … 4 5 6 … 12 */
+function pageWindow(current: number, total: number): (number | null)[] {
+  const pages = new Set([1, total, current - 1, current, current + 1]);
+  const sorted = [...pages].filter((p) => p >= 1 && p <= total).sort((a, b) => a - b);
+  const out: (number | null)[] = [];
+  sorted.forEach((p, i) => {
+    if (i > 0 && p - sorted[i - 1] > 1) out.push(null);
+    out.push(p);
+  });
+  return out;
+}
+
+function Pagination({ page, totalPages, onChange }: { page: number; totalPages: number; onChange: (page: number) => void }) {
+  if (totalPages <= 1) return null;
+  const button = 'min-w-10 rounded-xl border px-3 py-2 text-sm font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600';
+  return (
+    <nav aria-label="Inspection pages" className="mt-4 flex flex-wrap items-center justify-center gap-2">
+      <button
+        type="button"
+        onClick={() => onChange(page - 1)}
+        disabled={page === 1}
+        className={`${button} border-slate-300 bg-white text-slate-700 disabled:opacity-40`}
+      >
+        ‹ Prev
+      </button>
+      {pageWindow(page, totalPages).map((p, i) =>
+        p === null ? (
+          <span key={`gap-${i}`} className="px-1 text-slate-500" aria-hidden="true">…</span>
+        ) : (
+          <button
+            key={p}
+            type="button"
+            onClick={() => onChange(p)}
+            aria-current={p === page ? 'page' : undefined}
+            aria-label={`Page ${p}`}
+            className={`${button} ${p === page ? 'border-blue-700 bg-blue-700 text-white' : 'border-slate-300 bg-white text-slate-700'}`}
+          >
+            {p}
+          </button>
+        ),
+      )}
+      <button
+        type="button"
+        onClick={() => onChange(page + 1)}
+        disabled={page === totalPages}
+        className={`${button} border-slate-300 bg-white text-slate-700 disabled:opacity-40`}
+      >
+        Next ›
+      </button>
+    </nav>
+  );
+}
 
 function Metric({ label, value, tone = 'text-slate-900' }: { label: string; value: number | string; tone?: string }) {
   return (
@@ -203,14 +260,13 @@ function DetailDrawer({
 export function InspectionHistoryPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [items, setItems] = useState<Prediction[]>([]);
-  const [batches, setBatches] = useState<Batch[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
   const [dateFilter, setDateFilter] = useState('all');
   const [decisionFilter, setDecisionFilter] = useState<Decision | ''>('');
   const [reasonFilter, setReasonFilter] = useState('');
-  const [hasMore, setHasMore] = useState(false);
+  const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<PredictionDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
@@ -219,12 +275,18 @@ export function InspectionHistoryPage() {
     ...(reasonFilter ? { review_reason: reasonFilter } : {}),
   }), [decisionFilter, reasonFilter]);
 
-  const load = useCallback(async (append = false, offset = 0) => {
+  // Load every matching inspection so search, date filters and totals cover the
+  // whole history; the list itself is then shown PAGE_SIZE at a time.
+  const load = useCallback(async () => {
     setLoading(true);
     try {
-      const page = await apiClient.getInspections(offset, PAGE_SIZE, filters);
-      setItems((current) => (append ? [...current, ...page] : page));
-      setHasMore(page.length === PAGE_SIZE);
+      const all: Prediction[] = [];
+      for (let request = 0; request < MAX_FETCH_REQUESTS; request += 1) {
+        const batch = await apiClient.getInspections(all.length, FETCH_SIZE, filters);
+        all.push(...batch);
+        if (batch.length < FETCH_SIZE) break;
+      }
+      setItems(all);
       setError('');
     } catch (err) {
       setError(`Could not load inspection history: ${getErrorMessage(err)}`);
@@ -236,10 +298,6 @@ export function InspectionHistoryPage() {
   useEffect(() => {
     void load();
   }, [load]);
-
-  useEffect(() => {
-    apiClient.getBatches().then(setBatches).catch((err) => setError(`Could not load saved batches: ${getErrorMessage(err)}`));
-  }, []);
 
   const openInspection = useCallback(async (id: number) => {
     setDetailLoading(true);
@@ -276,6 +334,13 @@ export function InspectionHistoryPage() {
     return true;
   }), [items, query, dateFilter]);
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  // Clamp during render so a shrinking list never shows an empty page, even for one frame.
+  const currentPage = Math.min(page, totalPages);
+  const pageItems = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const firstShown = filtered.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0;
+  const lastShown = Math.min(currentPage * PAGE_SIZE, filtered.length);
+
   const totals = filtered.reduce((acc, item) => ({
     eggs: acc.eggs + item.total_detections,
     acceptable: acc.acceptable + item.acceptable_count,
@@ -283,11 +348,22 @@ export function InspectionHistoryPage() {
     review: acc.review + (isLegacy(item) ? 0 : item.needs_review_count),
   }), { eggs: 0, acceptable: 0, reject: 0, review: 0 });
 
+  // Any filter change starts again at page 1.
+  const withPageReset = <T,>(setter: (value: T) => void) => (value: T) => {
+    setter(value);
+    setPage(1);
+  };
+  const changeQuery = withPageReset(setQuery);
+  const changeDate = withPageReset(setDateFilter);
+  const changeDecision = withPageReset(setDecisionFilter);
+  const changeReason = withPageReset(setReasonFilter);
+
   const clearFilters = () => {
     setQuery('');
     setDateFilter('all');
     setDecisionFilter('');
     setReasonFilter('');
+    setPage(1);
   };
 
   return (
@@ -305,14 +381,6 @@ export function InspectionHistoryPage() {
             <button type="button" onClick={() => void load()} className="ml-2 font-bold underline">Retry</button>
           </div>
         )}
-        {batches.length > 0 && <section className="rounded-2xl bg-white p-4">
-          <h2 className="font-bold text-slate-900">Saved batches</h2>
-          <div className="mt-3 space-y-3">{batches.map((batch) => <div key={batch.id} className="rounded-xl border border-slate-200 p-3 text-sm">
-            <p className="font-semibold">Batch #{batch.id} · {new Date(batch.created_at).toLocaleString()}</p>
-            <p>{batch.total_detections} eggs · {batch.acceptable_count} acceptable · {batch.reject_count} reject · {batch.needs_review_count} review</p>
-            <div className="mt-2 flex flex-wrap gap-2">{batch.inspection_ids.map((id) => <button key={id} type="button" className="text-blue-700 underline" onClick={() => void openInspection(id)}>Inspection #{id}</button>)}</div>
-          </div>)}</div>
-        </section>}
         <section aria-label="Totals for the listed inspections" className="grid grid-cols-2 gap-3 sm:grid-cols-5">
           <Metric label="Inspections" value={filtered.length} />
           <Metric label="Eggs" value={totals.eggs} />
@@ -325,22 +393,22 @@ export function InspectionHistoryPage() {
             <input
               aria-label="Search inspection code or file name"
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) => changeQuery(event.target.value)}
               placeholder="Search inspection code or file name"
               className="min-w-0 rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-blue-600"
             />
-            <select aria-label="Filter by date" value={dateFilter} onChange={(event) => setDateFilter(event.target.value)} className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm">
+            <select aria-label="Filter by date" value={dateFilter} onChange={(event) => changeDate(event.target.value)} className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm">
               <option value="all">All dates</option>
               <option value="today">Today</option>
               <option value="7days">Last 7 days</option>
             </select>
-            <select aria-label="Filter by egg decision" value={decisionFilter} onChange={(event) => setDecisionFilter(event.target.value as Decision | '')} className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm">
+            <select aria-label="Filter by egg decision" value={decisionFilter} onChange={(event) => changeDecision(event.target.value as Decision | '')} className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm">
               <option value="">Any decision</option>
               {DECISIONS.map((decision) => (
                 <option key={decision} value={decision}>Has {DECISION_META[decision].label.toLowerCase()} eggs</option>
               ))}
             </select>
-            <select aria-label="Filter by reason" value={reasonFilter} onChange={(event) => setReasonFilter(event.target.value)} className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm">
+            <select aria-label="Filter by reason" value={reasonFilter} onChange={(event) => changeReason(event.target.value)} className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm">
               <option value="">Any reason</option>
               {Object.entries(REASON_LABELS).map(([code, label]) => (
                 <option key={code} value={code}>{label}</option>
@@ -354,13 +422,15 @@ export function InspectionHistoryPage() {
         <section aria-busy={loading}>
           <div className="mb-3 flex items-center justify-between">
             <h2 className="font-bold text-slate-900">Inspections</h2>
-            <span className="text-xs text-slate-600" aria-live="polite">{loading ? 'Loading…' : `${filtered.length} shown`}</span>
+            <span className="text-xs text-slate-600" aria-live="polite">
+              {loading ? 'Loading…' : filtered.length ? `${firstShown}–${lastShown} of ${filtered.length}` : '0 shown'}
+            </span>
           </div>
           {loading && items.length === 0 ? (
             <p className="rounded-xl bg-white p-8 text-center text-sm text-slate-600">Loading inspection history…</p>
           ) : filtered.length ? (
             <div className="grid gap-3">
-              {filtered.map((item) => (
+              {pageItems.map((item) => (
                 <HistoryCard key={item.id} item={item} onOpen={() => void openInspection(item.id)} />
               ))}
             </div>
@@ -369,16 +439,7 @@ export function InspectionHistoryPage() {
               No matching inspections.
             </div>
           )}
-          {hasMore && (
-            <button
-              type="button"
-              disabled={loading}
-              onClick={() => void load(true, items.length)}
-              className="mt-4 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 disabled:opacity-60"
-            >
-              Load more
-            </button>
-          )}
+          <Pagination page={currentPage} totalPages={totalPages} onChange={setPage} />
         </section>
       </div>
       {(selected || detailLoading) && <DetailDrawer detail={selected} loading={detailLoading} onClose={closeDetail} />}
