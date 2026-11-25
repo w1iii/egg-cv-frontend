@@ -17,19 +17,22 @@ import { Navbar } from '../components/Navbar';
 
 // v2: inspections replaced multi-image batch counts; v1 state is ignored.
 const INSPECTOR_STORAGE_KEY = 'egg-cv:inspector-state:v2';
+const PENDING_BATCH_KEY = 'egg-cv:pending-batch';
+
+type PendingInspection = Pick<PredictionDetail, 'id' | 'total_detections' | 'acceptable_count' | 'reject_count' | 'needs_review_count'>;
 
 interface PersistedInspectorState {
   result: PredictionDetail | null;
   crops: Record<number, string>;
+  pending: PendingInspection[];
 }
 
-const emptyState: PersistedInspectorState = { result: null, crops: {} };
+const emptyState: PersistedInspectorState = { result: null, crops: {}, pending: [] };
 
 function readPersistedState(): PersistedInspectorState {
   try {
     const stored = window.localStorage.getItem(INSPECTOR_STORAGE_KEY);
-    if (!stored) return emptyState;
-    const parsed: unknown = JSON.parse(stored);
+    const parsed: unknown = stored ? JSON.parse(stored) : {};
     if (!parsed || typeof parsed !== 'object') return emptyState;
     const state = parsed as Record<string, unknown>;
     const result =
@@ -40,7 +43,9 @@ function readPersistedState(): PersistedInspectorState {
       state.crops && typeof state.crops === 'object'
         ? (state.crops as Record<number, string>)
         : {};
-    return { result, crops };
+    const savedPending: unknown = JSON.parse(window.localStorage.getItem(PENDING_BATCH_KEY) || '[]');
+    const pending = Array.isArray(savedPending) ? savedPending as PendingInspection[] : [];
+    return { result, crops, pending };
   } catch {
     return emptyState;
   }
@@ -62,6 +67,9 @@ export function Inspector() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [health, setHealth] = useState<HealthStatus | null>(null);
+  const [pending, setPending] = useState<PendingInspection[]>(persistedState.pending);
+  const [saving, setSaving] = useState(false);
+  const [savedBatch, setSavedBatch] = useState<number | null>(null);
 
   useEffect(() => {
     try {
@@ -73,6 +81,14 @@ export function Inspector() {
       // Keeping the last result across reloads is a convenience only.
     }
   }, [crops, result]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(PENDING_BATCH_KEY, JSON.stringify(pending));
+    } catch {
+      setError('Unable to preserve the pending batch in this browser. Save it before leaving this page.');
+    }
+  }, [pending]);
 
   useEffect(() => {
     let active = true;
@@ -108,6 +124,12 @@ export function Inspector() {
       }
       setResult(detail);
       setCrops(thumbnails);
+      setPending((current) => [...current, {
+        id: detail.id, total_detections: detail.total_detections,
+        acceptable_count: detail.acceptable_count, reject_count: detail.reject_count,
+        needs_review_count: detail.needs_review_count,
+      }]);
+      setSavedBatch(null);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -208,6 +230,21 @@ export function Inspector() {
     URL.revokeObjectURL(url);
   }, [result]);
 
+  const saveBatch = useCallback(async () => {
+    if (!pending.length || saving || busy) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const batch = await apiClient.saveBatch(pending.map((inspection) => inspection.id));
+      setPending([]);
+      setSavedBatch(batch.id);
+    } catch (err) {
+      setError(`Could not save batch: ${getErrorMessage(err)}`);
+    } finally {
+      setSaving(false);
+    }
+  }, [pending, saving, busy]);
+
   return (
     <main className="w-full bg-[#f8fbfe] bg-[radial-gradient(ellipse_90%_70%_at_20%_-10%,rgba(0,102,255,0.09),transparent_60%),radial-gradient(ellipse_80%_60%_at_85%_15%,rgba(39,223,188,0.11),transparent_55%),radial-gradient(ellipse_90%_60%_at_50%_105%,rgba(16,185,129,0.08),transparent_60%),radial-gradient(circle_at_50%_45%,rgba(255,255,255,0.85),rgba(240,246,253,0.95))] min-h-screen relative overflow-hidden">
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
@@ -257,7 +294,7 @@ export function Inspector() {
             </div>
           )}
 
-          <ResultsPanel result={result} crops={crops} />
+          <ResultsPanel result={result} crops={crops} pending={pending} saving={saving} busy={busy} savedBatch={savedBatch} onSaveBatch={() => void saveBatch()} />
           <StatusFooter health={health} result={result} onExport={exportInspection} />
         </div>
       </div>

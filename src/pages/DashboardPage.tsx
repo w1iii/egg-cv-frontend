@@ -71,7 +71,14 @@ export function DashboardPage() {
   }, []);
 
   const recent = stats.recent_predictions ?? [];
-  const show = (value: number) => (loading ? '—' : value.toLocaleString());
+  const show = (value: number | null | undefined) =>
+    loading || typeof value !== 'number' || !Number.isFinite(value) ? '—' : value.toLocaleString();
+  const damagedPercentage = typeof stats.damaged_percentage === 'number' && Number.isFinite(stats.damaged_percentage)
+    ? `${stats.damaged_percentage.toFixed(1)}%`
+    : '—';
+  const averageProcessingTime = typeof stats.avg_processing_time_ms === 'number' && Number.isFinite(stats.avg_processing_time_ms)
+    ? `${Math.round(stats.avg_processing_time_ms)} ms`
+    : '—';
   const loaded = (flag: boolean | undefined): ComponentState => (!health ? 'checking' : flag ? 'ready' : 'missing');
   const components: [string, ComponentState][] = [
     ['Database', loaded(health?.database_connected)],
@@ -109,8 +116,8 @@ export function DashboardPage() {
         <section className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
           <Metric label="Inspections" value={show(stats.total_predictions)} note="One per image" />
           <Metric label="Eggs inspected" value={show(stats.total_detections)} />
-          <Metric label="Damaged egg rate" value={loading ? '—' : `${stats.damaged_percentage.toFixed(1)}%`} note="Damage classifier output, all eggs" />
-          <Metric label="Avg processing" value={loading ? '—' : `${Math.round(stats.avg_processing_time_ms)} ms`} />
+          <Metric label="Damaged egg rate" value={loading ? '—' : damagedPercentage} note="Damage classifier output, all eggs" />
+          <Metric label="Avg processing" value={loading ? '—' : averageProcessingTime} />
         </section>
         <section className="grid gap-4 lg:grid-cols-[1.1fr_.9fr]">
           <article className="rounded-2xl border border-white bg-white/85 p-4 shadow-sm sm:p-6">

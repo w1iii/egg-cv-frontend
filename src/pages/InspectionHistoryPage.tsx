@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { apiClient, resolveApiUrl } from '../api/client';
-import { Decision, InspectionFilters, Prediction, PredictionDetail } from '../types';
+import { Batch, Decision, InspectionFilters, Prediction, PredictionDetail } from '../types';
 import { Navbar } from '../components/Navbar';
 import { DecisionBadge, ReasonList } from '../components/DecisionBadge';
 import { InspectionNotices } from '../components/InspectionNotices';
@@ -203,6 +203,7 @@ function DetailDrawer({
 export function InspectionHistoryPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [items, setItems] = useState<Prediction[]>([]);
+  const [batches, setBatches] = useState<Batch[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
@@ -235,6 +236,10 @@ export function InspectionHistoryPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    apiClient.getBatches().then(setBatches).catch((err) => setError(`Could not load saved batches: ${getErrorMessage(err)}`));
+  }, []);
 
   const openInspection = useCallback(async (id: number) => {
     setDetailLoading(true);
@@ -300,6 +305,14 @@ export function InspectionHistoryPage() {
             <button type="button" onClick={() => void load()} className="ml-2 font-bold underline">Retry</button>
           </div>
         )}
+        {batches.length > 0 && <section className="rounded-2xl bg-white p-4">
+          <h2 className="font-bold text-slate-900">Saved batches</h2>
+          <div className="mt-3 space-y-3">{batches.map((batch) => <div key={batch.id} className="rounded-xl border border-slate-200 p-3 text-sm">
+            <p className="font-semibold">Batch #{batch.id} · {new Date(batch.created_at).toLocaleString()}</p>
+            <p>{batch.total_detections} eggs · {batch.acceptable_count} acceptable · {batch.reject_count} reject · {batch.needs_review_count} review</p>
+            <div className="mt-2 flex flex-wrap gap-2">{batch.inspection_ids.map((id) => <button key={id} type="button" className="text-blue-700 underline" onClick={() => void openInspection(id)}>Inspection #{id}</button>)}</div>
+          </div>)}</div>
+        </section>}
         <section aria-label="Totals for the listed inspections" className="grid grid-cols-2 gap-3 sm:grid-cols-5">
           <Metric label="Inspections" value={filtered.length} />
           <Metric label="Eggs" value={totals.eggs} />

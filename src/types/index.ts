@@ -171,6 +171,16 @@ export interface InspectionFilters {
   review_reason?: string;
 }
 
+export interface Batch {
+  id: number;
+  created_at: string;
+  inspection_ids: number[];
+  total_detections: number;
+  acceptable_count: number;
+  reject_count: number;
+  needs_review_count: number;
+}
+
 export interface CapturedFrame {
   file: File;
   dataUrl: string;

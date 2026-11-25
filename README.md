@@ -35,7 +35,7 @@ Quality gates: `npx tsc --noEmit`, `npm run lint`, `npm run build`.
 
 ## Deploy (Vercel)
 
-1. Import this repository; the root directory is the repo itself.
+1. Import the frontend repository; set Vercel **Root Directory** to `.`.
 2. Framework preset: **Vite** (also pinned in `vercel.json`).
 3. Build command `npm run build`, output directory `dist`.
 4. Add the environment variable:
@@ -46,6 +46,8 @@ Quality gates: `npx tsc --noEmit`, `npm run lint`, `npm run build`.
 
    Use the backend origin only — no `/api/v1` suffix.
 
-SPA routes are rewritten to `index.html` by `vercel.json`.
+SPA routes are rewritten to `index.html` by `vercel.json`. If importing a parent
+repository containing this frontend as a subdirectory, use `egg-cv-frontend`
+as the root directory instead.
 
 After the first deploy, add the Vercel URL to the backend's `CORS_ORIGINS`.

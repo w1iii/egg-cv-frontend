@@ -1,5 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
 import {
+  Batch,
   DashboardStats,
   DecisionDistribution,
   GradeDistribution,
@@ -68,6 +69,16 @@ class ApiClient {
 
   async deleteInspection(id: number) {
     const response = await this.client.delete(`/predictions/${id}`);
+    return response.data;
+  }
+
+  async saveBatch(inspectionIds: number[]): Promise<Batch> {
+    const response = await this.client.post('/batches', { inspection_ids: inspectionIds });
+    return response.data;
+  }
+
+  async getBatches(): Promise<Batch[]> {
+    const response = await this.client.get('/batches');
     return response.data;
   }
 
