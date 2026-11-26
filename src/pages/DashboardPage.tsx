@@ -89,7 +89,6 @@ export function DashboardPage() {
       !health ? 'checking' : !health.cleanliness_model_loaded ? 'missing' : health.cleanliness_release_approved ? 'ready' : 'beta',
     ],
     ['Size grades (A/B/C)', !health ? 'checking' : health.size_grades_approved ? 'ready' : 'off'],
-    ['Weight estimation', !health ? 'checking' : health.weight_estimation_enabled ? 'ready' : 'off'],
   ];
 
   return (
