@@ -3,14 +3,9 @@ import { apiClient } from '../api/client';
 import { CapturedFrame, HealthStatus, PredictionDetail } from '../types';
 import { getErrorMessage } from '../utils/errorHandler';
 import { shortCode } from '../utils/decisions';
-import {
-  buildCropThumbnails,
-  fetchImageFile,
-  fileToFrame,
-} from '../utils/frames';
+import { buildCropThumbnails, fileToFrame } from '../utils/frames';
 import { ImageDropzone } from '../components/inspector/ImageDropzone';
 import { LiveCameraCapture } from '../components/inspector/LiveCameraCapture';
-import { SampleImageStrip } from '../components/inspector/SampleImageStrip';
 import { ResultsPanel } from '../components/inspector/ResultsPanel';
 import { StatusFooter } from '../components/inspector/StatusFooter';
 import { Navbar } from '../components/Navbar';
@@ -160,18 +155,6 @@ export function Inspector() {
     [analyzeFrame],
   );
 
-  const handleSampleSelect = useCallback(
-    async (imageUrl: string) => {
-      if (busy || analysisInFlightRef.current) return;
-      try {
-        await handleImageFile(await fetchImageFile(imageUrl));
-      } catch (err) {
-        setError(getErrorMessage(err));
-      }
-    },
-    [busy, handleImageFile],
-  );
-
   const handleFileChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
@@ -266,16 +249,11 @@ export function Inspector() {
             <p className="sr-only" role="status" aria-live="polite">
               {busy ? 'Analyzing image' : result ? `Inspection complete: ${result.total_detections} eggs` : ''}
             </p>
-            <SampleImageStrip
-              busy={busy}
-              onSelect={(imageUrl) => void handleSampleSelect(imageUrl)}
-            />
             <ImageDropzone
               busy={busy}
               previewDataUrl={previewDataUrl}
               onUpload={handleUpload}
               onDropFile={(file) => void handleImageFile(file)}
-              onDropSample={(imageUrl) => void handleSampleSelect(imageUrl)}
             />
             <LiveCameraCapture
               busy={busy}
